@@ -1,0 +1,4 @@
+*.VLD filter=lfs diff=lfs merge=lfs -text
+*.VLH filter=lfs diff=lfs merge=lfs -text
+*.VLPD filter=lfs diff=lfs merge=lfs -text
+*.VLPH filter=lfs diff=lfs merge=lfs -text

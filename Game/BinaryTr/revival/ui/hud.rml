@@ -1,0 +1,183 @@
+<rml>
+<head>
+	<title>Revival</title>
+	<link type="text/rcss" href="theme.rcss"/>
+</head>
+<body onload="Revival.setup(document)">
+	<!-- What is on screen while the player is hidden: a click here is the same as Tab.
+
+	     Panel dragging is deliberately NOT advertised here. The line sits on screen for as long
+	     as the player is in the lobby and has not pressed Tab, so every word in it is paid for
+	     by every player on every visit; a discoverable gesture is not worth that rent. Grabbing
+	     a panel by its header is self-evident once a panel is open, and the reset is a right
+	     click on the same header. -->
+	<div id="hint">
+		<div id="hintbadge"><svg src="../icons/radio.svg"/></div>
+		<span id="hinttext">Müzik · Tekrarlar · TAB</span>
+	</div>
+	<div id="music">
+		<!-- The pill's handle. The four movable panels are grabbed by their own header and by
+		     nothing else; `drag: drag` in theme.rcss is what makes the context latch this element
+		     and send the three events, and `drag: block` on .control is what keeps a press on the
+		     play or close glyph from moving the pill instead of doing its job. -->
+		<div id="bar" onmousedown="Revival.layout_press(event)" ondragstart="Revival.layout_grab(event)" ondrag="Revival.layout_move(event)" ondragend="Revival.layout_drop(event)">
+			<div id="badge"><svg src="../icons/radio.svg"/></div>
+			<div id="now">
+				<span id="headline">Revival FM</span>
+				<span id="subline">Waiting for the lobby</span>
+			</div>
+			<div class="control" id="toggle" onclick="Revival.toggle()"><svg id="toggleicon" src="../icons/play_glyph.svg"/></div>
+			<div class="control" id="close" onclick="Revival.ui_hide()"><svg src="../icons/close.svg"/></div>
+		</div>
+		<div class="control" id="chevron" onclick="Revival.expand_toggle()"><svg id="chevronicon" src="../icons/chevron_down.svg"/></div>
+
+		<!-- Hangs below the pill, positioned, so opening it never moves the pill. -->
+		<div id="card">
+			<div id="heading">
+				<!-- The station's own thumbnail when it has one (a PNG the sync worker fetched, its
+				     corners baked in: this backend clips nothing to a radius), else the built-in. SVG
+				     rather than a styled box: this backend has no shader interface, so a gradient can
+				     only arrive as a rasterized image, and lunasvg renders it at the element's own
+				     pixel size, which keeps it crisp instead of scaled. -->
+				<div id="art"><img id="artimg"/><svg src="../icons/station.svg"/></div>
+				<div id="identity">
+					<span id="name">Revival FM</span>
+					<span id="tagline">Canlı yayın</span>
+				</div>
+			</div>
+
+			<!-- The rows are written by the script: how many stations there are is the server's to
+			     decide. A row carries its own art, what that station's clock is on right now, and
+			     how many people are hearing it. Taller than the card can be, so it scrolls: the
+			     card hangs below a pill centred on the screen's edge and cannot grow past it. -->
+			<div class="section" id="stations" onmousedown="Revival.rows_press(event)" ondrag="Revival.rows_drag(event)" onmousescroll="Revival.rows_wheel(event)"></div>
+
+			<div class="section" id="transport">
+				<div class="control" id="previous" onclick="Revival.previous()"><svg src="../icons/prev.svg"/></div>
+				<div class="control primary" id="play" onclick="Revival.toggle()"><svg id="playicon" src="../icons/play.svg"/></div>
+				<div class="control" id="next" onclick="Revival.next()"><svg src="../icons/next.svg"/></div>
+			</div>
+
+			<div class="section" id="level">
+				<div class="control quiet" id="repeat" onclick="Revival.repeat_toggle()"><span class="icon">&#xE8EE;</span></div>
+				<div class="control" id="mutebutton" onclick="Revival.mute_toggle()"><svg id="mute" src="../icons/volume.svg"/></div>
+				<div id="volume" onmousedown="Revival.set_volume(event)" ondrag="Revival.set_volume(event)">
+					<div class="track">
+						<div class="fill" id="loudness"/>
+						<div class="knob" id="loudknob"/>
+					</div>
+				</div>
+			</div>
+
+			<!-- Folder mode only: a station's clock is shared, so it shows no timeline at all. -->
+			<div id="clock">
+				<span id="elapsed">0:00</span>
+				<span id="duration">0:00</span>
+			</div>
+			<div id="seek" onmousedown="Revival.seek(event)" ondrag="Revival.seek(event)">
+				<div class="track">
+					<div class="fill" id="played"/>
+					<div class="knob" id="playhead"/>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Every finished match, newest first, in the lobby while the overlay is open. replays.lua
+	     writes the rows from Revival.replay_list(). -->
+	<div id="replays">
+		<div id="replayhead" onclick="if not Revival.layout_dragged() then Revival.replays_toggle() end" onmousedown="Revival.layout_press(event)" ondragstart="Revival.layout_grab(event)" ondrag="Revival.layout_move(event)" ondragend="Revival.layout_drop(event)">
+			<div id="replaybadge"><svg src="../icons/replay.svg"/></div>
+			<span id="replaytitle">Tekrarlar</span>
+			<span id="replaycount"></span>
+			<svg id="replaychevron" src="../icons/chevron_down.svg"/>
+		</div>
+		<div id="replaycard">
+			<div id="replaylist" onmousescroll="Revival.replays_wheel(event)"></div>
+			<span id="replaynote"></span>
+		</div>
+	</div>
+
+	<!-- The bar a replay plays under. The player holds the pointer while a replay plays, so it
+	     answers without Tab; Space and the arrow keys work too. -->
+	<div id="replaybar">
+		<div class="control primary" id="rpplay" onclick="Revival.rp_pause()"><svg id="rpplayicon" src="../icons/pause.svg"/></div>
+		<div class="control" id="rpback" onclick="Revival.rp_step(-30)"><svg src="../icons/prev.svg"/></div>
+		<div class="control" id="rpforward" onclick="Revival.rp_step(30)"><svg src="../icons/next.svg"/></div>
+		<span id="rpclock">0:00</span>
+		<div id="rpseek" onmousedown="Revival.rp_seek(event)" ondrag="Revival.rp_seek(event)" onmouseup="Revival.rp_seek_done()" ondragend="Revival.rp_seek_done()">
+			<div class="track">
+				<div class="fill" id="rpplayed"/>
+				<div id="rpgoals"/>
+				<div class="knob" id="rphead"/>
+			</div>
+		</div>
+		<span id="rpfinish">0:00</span>
+		<div class="control" id="rpgoal" onclick="Revival.rp_next_goal()"><span>GOL</span></div>
+		<div class="control" id="rpspeed" onclick="Revival.rp_speed()"><span id="rpspeedtext">1×</span></div>
+		<div class="control" id="rpexit" onclick="Revival.rp_exit()"><svg src="../icons/close.svg"/></div>
+		<span id="rpstatus"></span>
+	</div>
+
+	<!-- How each peer's game traffic travels and its round trip, while a network match has peers.
+	     peerpaths.lua writes the rows from Revival.peer_paths(). -->
+	<div id="peerpaths" onmousedown="Revival.layout_press(event)" ondragstart="Revival.layout_grab(event)" ondrag="Revival.layout_move(event)" ondragend="Revival.layout_drop(event)"></div>
+
+	<!-- Reporting a player or a bug without leaving the game. It is a panel and not a /report
+	     command because a slash command never reaches us: the packed retail EXE parses the chat
+	     line itself (/w, /t and /s pick a channel byte) and answers anything else with a local
+	     "unknown command", so the text is swallowed before a packet exists. report.lua writes the
+	     target rows from Revival.report_targets() and report_send.cpp POSTs on its own thread.
+
+	     Bottom centre: the music pill owns the left edge and the replay list the top right, so
+	     this is the one place a card can open with neither of them under it. It shares the spot
+	     with #replaybar, which is why it hides while a replay plays. -->
+	<div id="report">
+		<div id="reporthead" onclick="if not Revival.layout_dragged() then Revival.report_toggle() end" onmousedown="Revival.layout_press(event)" ondragstart="Revival.layout_grab(event)" ondrag="Revival.layout_move(event)" ondragend="Revival.layout_drop(event)">
+			<div id="reportbadge"><span class="icon">&#xE7C1;</span></div>
+			<span id="reporttitle">Bildir</span>
+			<svg id="reportchevron" src="../icons/chevron_up.svg"/>
+		</div>
+
+		<!-- Hangs ABOVE the header and is positioned, so opening it never moves the header. It
+		     opens upwards because the panel sits on the bottom edge: a card that opened downwards
+		     would be off the screen. -->
+		<div id="reportcard">
+			<div id="reportkind">
+				<div class="reportseg on" id="reportkindplayer" onclick="Revival.report_kind('player')">Oyuncu Şikayeti</div>
+				<div class="reportseg" id="reportkindbug" onclick="Revival.report_kind('bug')">Hata Bildir</div>
+			</div>
+
+			<!-- The room's own roster: matchd hands every member the same slot records, so the
+			     host and each guest list the same people. The names are team names -- the records
+			     carry no account id -- so that is what a report carries and the backend resolves
+			     it. Picking one is the way a report is filed; the line under the rows opens the
+			     typed field for a name the roster does not have, and is all there is outside a
+			     room. report.lua writes the rows and that line. -->
+			<div id="reporttargets" onmousescroll="Revival.report_wheel(event)"></div>
+			<span class="reporthint" id="reporttargetmanual" onclick="Revival.report_manual()"></span>
+			<input type="text" id="reporttargetinput" maxlength="32"/>
+
+			<div id="reportcats"></div>
+
+			<!-- maxlength is in CHARACTERS in RmlUi, not bytes, which is the count the panel and
+			     the server both mean: half of Turkish is two bytes in UTF-8. -->
+			<textarea id="reporttext" maxlength="300"></textarea>
+
+			<div class="section reportfoot">
+				<span id="reportcount">0/300</span>
+				<div class="control primary" id="reportsend" onclick="Revival.report_submit()"><span id="reportsendtext">Gönder</span></div>
+			</div>
+			<span id="reportstatus"></span>
+		</div>
+	</div>
+
+	<!-- From the watch press until the replay plays. Underneath is gamed's replay room, which
+	     starts itself, and then the match load: nothing the player has to act on. -->
+	<div id="replaycover">
+		<div id="replaycoverbadge"><svg src="../icons/replay.svg"/></div>
+		<span id="replaycovertext">Tekrar hazırlanıyor…</span>
+	</div>
+
+</body>
+</rml>

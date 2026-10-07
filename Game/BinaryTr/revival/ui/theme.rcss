@@ -1,0 +1,1373 @@
+/* Every length is a whole number of pixels. RmlUi snaps glyph quads and geometry translations to
+   the pixel grid, so fractional or scaled lengths stay crisp but drift up to a pixel from where
+   the layout wanted them. Nothing here is scaled: the bar is drawn small rather than drawn large
+   and shrunk, which is what keeps the 12px text readable. */
+
+/* The document fills the viewport so layouts can use the whole screen, but nothing in it claims the
+   pointer until an element opts back in. That is what makes the transparent area click-through: the
+   host application keeps every mouse message the UI has no element under.
+
+   The bar is centred on the left edge by making the document a flex container, not by `top: 50%`
+   plus a translate: the bar's height is content-driven, and a percentage against an auto height
+   resolves to zero in RmlUi -- so the translate would do nothing and the bar would sit at the top. */
+body {
+	font-family: Segoe UI;
+	font-size: 14px;
+	color: #ffffff;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	display: flex;
+	align-items: center;
+}
+
+/* ---- the hint ---------------------------------------------------------------------------------
+   Drawn only while the player is hidden (the host sets `hidden` on the document): a faint pill in
+   the player's place, so a player who never learned Tab still finds the music. The host answers
+   a click on it by showing the player; nothing else here takes the pointer. */
+
+#hint {
+	display: none;
+	pointer-events: auto;
+	position: relative;
+	margin-left: 24px;
+	align-items: center;
+	gap: 10px;
+	box-sizing: border-box;
+	height: 44px;
+	padding: 0px 16px 0px 6px;
+	background-color: rgba(14, 30, 20, 96);
+	border: 1px rgba(255, 255, 255, 22);
+	border-radius: 22px;
+	cursor: pointer;
+	transition: background-color 0.12s quadratic-out;
+}
+
+#hint:hover {
+	background-color: rgba(14, 30, 20, 170);
+}
+
+/* `lobby` is set by the script once the game has asked for music, the same moment the player
+   starts; before that there is nothing behind the pill to open. */
+body.hidden.lobby #hint {
+	display: flex;
+}
+
+body.hidden #music {
+	display: none;
+}
+
+#hintbadge {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	background-color: rgba(255, 255, 255, 18);
+	border-radius: 16px;
+}
+
+#hintbadge svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+}
+
+#hinttext {
+	font-size: 13px;
+	font-weight: bold;
+	color: rgba(255, 255, 255, 200);
+	white-space: nowrap;
+}
+
+/* ---- radio pill --------------------------------------------------------------------------------
+   Dark green glass over the pitch. There is no blur and no shadow to be had -- this backend draws
+   flat quads and rasterized SVG, nothing else -- so the surface is one translucent colour and the
+   mock's soft edge is a 1px light border. Alpha is 0..255 in RCSS, not 0..1.
+
+   #music is the pill's box and nothing more. The chevron and the card are positioned below it, so
+   the pill stays where the document centred it whether or not the card is open. */
+
+#music {
+	pointer-events: auto;
+	position: relative;
+	margin-left: 24px;
+	width: 330px;
+}
+
+#bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	box-sizing: border-box;
+	width: 330px;
+	height: 62px;
+	padding: 0px 12px 0px 8px;
+	background-color: rgba(14, 30, 20, 196);
+	border: 1px rgba(255, 255, 255, 34);
+	border-radius: 31px;
+}
+
+/* ---- moving a panel ----------------------------------------------------------------------------
+   Four panels are draggable, each by one handle: the pill by #bar, the replay list by #replayhead,
+   the report panel by #reporthead, and #peerpaths by itself because it has no header. #replaybar
+   is deliberately not one of them: it is a transient transport that only exists while a replay
+   plays, #rpseek inside it already owns three drag handlers of its own, and a transport the player
+   moves once and then loses under the HUD in the middle of a match is worse than one that is
+   always in the same place.
+
+   `drag: drag` is the whole mechanism. On a primary press the context walks UP from whatever was
+   hit looking for an element with a drag behaviour, latches it, and sends dragstart/drag/dragend
+   to it until the button comes up, wherever the pointer has gone by then. layout.lua only turns
+   those positions into a left/top.
+
+   Which means the walk decides what counts as "grabbing the handle", and `drag: block` on .control
+   below is what stops it at the play glyph: block ends the search instead of passing it upwards,
+   so a press on a control does what the control does and the panel stays put. #volume, #stations
+   and #rpseek stop the same walk by declaring `drag: drag` themselves, which is why the rails
+   inside these panels keep scrubbing and scrolling exactly as before. */
+#bar {
+	drag: drag;
+}
+
+/* A panel the player has moved. `moved` exists to turn OFF whichever anchoring the panel was
+   built with, because the inline left/top layout.lua writes would otherwise be fighting a right,
+   a bottom or a pair of auto margins that are still in force.
+
+   The pill is the odd one: it is the only movable panel that is in FLOW, centred on the left edge
+   by the body's flex box, so for it the neutralised anchoring is the flex line itself. Absolute
+   also keeps it a containing block, so #card and #chevron still hang off it. */
+#music.moved {
+	position: absolute;
+	margin-left: 0px;
+}
+
+.icon {
+	font-family: Segoe MDL2 Assets;
+	font-weight: normal;
+}
+
+#badge {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 46px;
+	height: 46px;
+	background-color: rgba(255, 255, 255, 18);
+	border-radius: 23px;
+}
+
+#badge svg {
+	display: block;
+	width: 26px;
+	height: 26px;
+}
+
+#now {
+	flex: 1 1 0px;
+	overflow: hidden;
+}
+
+/* No semibold face is loaded (segoeui and segoeuib only), so the mock's semibold is bold here. */
+#headline {
+	display: block;
+	font-size: 15px;
+	font-weight: bold;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+#subline {
+	display: block;
+	font-size: 12px;
+	color: #a9b6ad;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+/* ---- marquee ----------------------------------------------------------------------------------- */
+
+/* Text too wide for its box scrolls instead of clipping. The box keeps its own overflow:hidden and
+   holds one .scroll carrying two identical segments, the second exactly one period right of the
+   first, so the wrap has nothing to see.
+
+   Both carry an explicit pixel width written by the script, and they have to: an inline-block here
+   shrink-to-fits against the space available, so a segment left to size itself comes out exactly as
+   wide as the box it was supposed to overflow -- measuring it would always say "it fits". The
+   script measures with scroll_width instead and states the width outright. */
+.scroll {
+	display: inline-block;
+	white-space: nowrap;
+}
+
+.seg {
+	display: inline-block;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+/* What separates the two copies: the same middle dot the hint pill uses, and its WIDTH is the gap.
+   Stated here rather than left to the glyph, so the width the script declares for a segment and the
+   width of what is in it agree exactly. */
+.sep {
+	display: inline-block;
+	width: 24px;
+	text-align: center;
+}
+
+/* ---- controls ---------------------------------------------------------------------------------- */
+
+/* Colour and opacity transitions only: geometry stays where layout put it, so a glyph under them
+   never leaves the pixel grid. An SVG carries its own fill, so its hover and press feedback is
+   opacity, not colour. */
+.control {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	color: #dfe7e1;
+	opacity: 0.9;
+	cursor: pointer;
+	transition: color opacity 0.12s quadratic-out;
+	/* Ends the drag search that a press starts, rather than letting it reach the handle above:
+	   pressing play inside the pill's #bar plays, and the pill does not move. See "moving a
+	   panel". This costs the controls nothing that are not inside a handle. */
+	drag: block;
+}
+
+/* Explicit, not content-derived: an <svg> child does not give its parent flex item a base width, so
+   a control sized by content collapsed to its padding and the icons piled onto the play button. */
+.control svg {
+	display: block;
+	width: 20px;
+	height: 20px;
+}
+
+#close {
+	width: 24px;
+	height: 24px;
+	opacity: 0.6;
+}
+
+#close svg {
+	width: 14px;
+	height: 14px;
+}
+
+.control:hover {
+	color: #ffffff;
+	opacity: 1.0;
+}
+
+.control:active {
+	opacity: 0.7;
+}
+
+/* The glyph is 14px; the box around it is what a pointer has to hit. */
+#chevron {
+	position: absolute;
+	top: 62px;
+	left: 135px;
+	width: 60px;
+	height: 24px;
+	opacity: 0.8;
+}
+
+#chevron svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* The one lit control: the blue button, its gradient and its sheen are all inside play.svg /
+   pause.svg, which the script swaps by `src`. */
+.control.primary {
+	width: 32px;
+	height: 32px;
+}
+
+.control.primary svg {
+	width: 32px;
+	height: 32px;
+}
+
+/* ---- station card ------------------------------------------------------------------------------
+   Closed, the card must neither draw nor take a click: it hangs over the game, not over the
+   document, and a player would otherwise lose a strip of the lobby to an invisible panel.
+   `visibility: hidden` is what removes the whole subtree from the stacking context; it is not
+   inherited, but AddToStackingContext returns before descending. It is not a fade: RmlUi's opacity
+   is inherited per element rather than composited, so a control carrying its own hover opacity
+   would pop in at full strength while the surface was still coming up. */
+
+#card {
+	position: absolute;
+	top: 84px;
+	left: -10px;
+	box-sizing: border-box;
+	width: 350px;
+	padding: 16px 16px 14px 16px;
+	background-color: rgba(14, 30, 20, 196);
+	border: 1px rgba(255, 255, 255, 34);
+	border-radius: 22px;
+	pointer-events: none;
+	visibility: hidden;
+}
+
+#music.open #card {
+	pointer-events: auto;
+	visibility: visible;
+}
+
+#heading {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+/* The rounding is inside the image, station.svg or the station's own PNG: this backend does not
+   clip an image by border-radius. The script sets `custom` when the station has its own. */
+#art {
+	flex: 0 0 auto;
+	width: 64px;
+	height: 64px;
+}
+
+#art svg, #art img {
+	display: block;
+	width: 64px;
+	height: 64px;
+}
+
+#art img, #art.custom svg {
+	display: none;
+}
+
+#art.custom img {
+	display: block;
+}
+
+#identity {
+	flex: 1 1 0px;
+	overflow: hidden;
+}
+
+#name {
+	display: block;
+	font-size: 22px;
+	font-weight: bold;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+#tagline {
+	display: block;
+	margin-top: 2px;
+	font-size: 14px;
+	color: #a9b6ad;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.section {
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px rgba(255, 255, 255, 26);
+}
+
+/* ---- station list, transport (legacy) -------------------------------------------------------------
+   One document for both modes: the script sets `station` on #music and these rules pick the rows. */
+
+#stations {
+	display: none;
+}
+
+/* A column, capped: the card hangs below a pill centred on the screen's edge, so a list that grew
+   with the station count would run off the bottom of the screen -- and nothing below the card is
+   drawn, so that is not a clipped panel but a volume rail the player cannot reach. The budget is
+   the shortest viewport worth supporting, 720, and the number is measured rather than reasoned
+   about: script_test's "the open card fits the shortest screen worth supporting" lays the card out
+   at 1280x720 and fails if it does not. Deliberately not a whole number of rows -- the one cut off
+   is what says there is more below. The overflow is reached by the wheel or by dragging, both
+   handled by the script, and `drag: drag` keeps the drag events coming once the pointer has left. */
+#music.station #stations {
+	display: block;
+	max-height: 120px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	drag: drag;
+}
+
+/* One station: its art, its name over what its own clock is on right now, and its listeners. The
+   border is on every row rather than only the chosen one, transparent until then: a border that
+   appears on selection would move the text a pixel. */
+.row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	box-sizing: border-box;
+	width: 100%;
+	padding: 5px 8px 5px 6px;
+	border: 1px rgba(0, 0, 0, 0);
+	border-radius: 13px;
+	cursor: pointer;
+	transition: background-color 0.12s quadratic-out;
+}
+
+.row:hover {
+	background-color: rgba(255, 255, 255, 16);
+}
+
+.row.on {
+	background-color: rgba(43, 156, 242, 40);
+	border: 1px #2b9cf2;
+}
+
+/* As #art: the rounding is inside the image, this backend clipping nothing to a radius. */
+.rowart {
+	flex: 0 0 auto;
+	width: 30px;
+	height: 30px;
+}
+
+.rowart svg, .rowart img {
+	display: block;
+	width: 30px;
+	height: 30px;
+}
+
+.rowtext {
+	flex: 1 1 0px;
+	overflow: hidden;
+}
+
+/* Clipped rather than scrolled: a marquee on every row at once would be a row of moving text, and
+   the chosen station's full name and track are already on the pill and in the card's heading. */
+.rowname {
+	display: block;
+	font-size: 13px;
+	font-weight: bold;
+	color: #e4ebe6;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.row.on .rowname {
+	color: #ffffff;
+}
+
+.rownow {
+	display: block;
+	font-size: 11px;
+	color: #a9b6ad;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+/* Absent entirely until the backend has reported counts: an empty span, not a zero. */
+.rowheads {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	color: #a9b6ad;
+}
+
+.rowheads .icon {
+	font-size: 12px;
+}
+
+.rowcount {
+	font-family: Consolas;
+	font-size: 11px;
+}
+
+scrollbarhorizontal {
+	height: 0px;
+}
+
+/* The list's own bar, and the only thing that says a station list is longer than the card: there
+   is no shadow and no gradient to fade an edge with. `overflow-y: auto` keeps it off a list that
+   fits, so a three-station radio loses no width to it. */
+scrollbarvertical {
+	width: 4px;
+	margin-left: 6px;
+}
+
+scrollbarvertical slidertrack {
+	background-color: rgba(255, 255, 255, 14);
+	border-radius: 2px;
+}
+
+scrollbarvertical sliderbar {
+	width: 4px;
+	min-height: 24px;
+	background-color: rgba(255, 255, 255, 60);
+	border-radius: 2px;
+}
+
+scrollbarvertical sliderbar:hover {
+	background-color: rgba(255, 255, 255, 90);
+}
+
+/* No stepper buttons: the bar is an indicator here, and a 4px arrow is not a target. */
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc {
+	height: 0px;
+}
+
+/* RmlUi has no browser default style sheet: an element is `inline` unless something says otherwise,
+   and an inline box ignores width and height. Flex items are blockified automatically, which is why
+   the rails need no display but everything inside them does. */
+#transport {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+}
+
+#music.station #transport {
+	display: none;
+}
+
+/* ---- level ------------------------------------------------------------------------------------- */
+
+#level {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+#mutebutton svg {
+	width: 22px;
+	height: 22px;
+}
+
+/* `drag: drag` is what makes a rail keep receiving pointer positions after the press leaves it:
+   RmlUi picks the drag element by walking up from whatever was pressed -- the knob or the fill --
+   and then sends every move to it until the button comes up, wherever the pointer has gone. Without
+   it a scrub would stop the moment the pointer left the rail. */
+#volume {
+	flex: 1 1 0px;
+	height: 14px;
+	display: flex;
+	align-items: center;
+	cursor: pointer;
+	drag: drag;
+}
+
+.track {
+	position: relative;
+	width: 100%;
+	height: 4px;
+	background-color: rgba(255, 255, 255, 56);
+	border-radius: 2px;
+}
+
+.fill {
+	display: block;
+	height: 4px;
+	background-color: #2b9cf2;
+	border-radius: 2px;
+}
+
+/* Placed by its own left edge rather than a transform: a transform would take the knob off the
+   pixel grid, and this one is small enough that a half pixel shows. */
+.knob {
+	position: absolute;
+	top: -5px;
+	width: 14px;
+	height: 14px;
+	margin-left: -7px;
+	background-color: #ffffff;
+	border-radius: 7px;
+}
+
+#loudness {
+	width: 65%;
+}
+
+#loudknob {
+	left: 65%;
+}
+
+/* Repeat is a legacy mode: a station's loop is the server's, not the listener's. */
+.control.quiet {
+	width: 14px;
+	height: 14px;
+	opacity: 1.0;
+	color: #a9b6ad;
+}
+
+.control.quiet .icon {
+	font-size: 13px;
+}
+
+.control.quiet:hover {
+	color: #ffffff;
+}
+
+/* Lit when the mode is on, which the script toggles by class rather than by writing colours. */
+.control.quiet.on {
+	color: #2b9cf2;
+}
+
+#music.station #repeat {
+	display: none;
+}
+
+/* ---- timeline (folder mode only) --------------------------------------------------------------- */
+
+#clock {
+	margin-top: 14px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-family: Consolas;
+	font-size: 10px;
+	color: #a9b6ad;
+}
+
+#seek {
+	margin-top: 4px;
+	height: 12px;
+	display: flex;
+	align-items: center;
+	cursor: pointer;
+	drag: drag;
+}
+
+/* The radio's clock is shared: nothing to scrub, nothing to show. */
+#music.station #clock, #music.station #seek {
+	display: none;
+}
+
+#played {
+	width: 18%;
+}
+
+#playhead {
+	left: 18%;
+}
+
+/* ---- replays ------------------------------------------------------------------------------------
+   The list sits at the top right, in the lobby and only while the overlay is open: the music owns
+   the left edge and the hidden state. The card follows #card's rule: closed, it neither draws nor
+   takes a click. */
+
+#replays {
+	display: none;
+	pointer-events: auto;
+	position: absolute;
+	top: 24px;
+	right: 24px;
+	width: 380px;
+}
+
+/* Anchored by its right edge, so that is the one property the inline left has to displace. */
+#replays.moved {
+	right: auto;
+}
+
+body.lobby #replays {
+	display: block;
+}
+
+body.hidden #replays, body.replaywait #replays, body.replaying #replays, body.peers #replays {
+	display: none;
+}
+
+#replayhead {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	box-sizing: border-box;
+	height: 44px;
+	padding: 0px 16px 0px 6px;
+	background-color: rgba(14, 30, 20, 196);
+	border: 1px rgba(255, 255, 255, 34);
+	border-radius: 22px;
+	cursor: pointer;
+	drag: drag;
+}
+
+#replaybadge {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	background-color: rgba(255, 255, 255, 18);
+	border-radius: 16px;
+}
+
+#replaybadge svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+}
+
+#replaytitle {
+	flex: 1 1 0px;
+	font-weight: bold;
+}
+
+#replaycount {
+	font-size: 12px;
+	color: #a9b6ad;
+}
+
+#replaychevron {
+	display: block;
+	width: 14px;
+	height: 14px;
+}
+
+#replaycard {
+	display: block;
+	margin-top: 8px;
+	box-sizing: border-box;
+	padding: 8px;
+	background-color: rgba(14, 30, 20, 196);
+	border: 1px rgba(255, 255, 255, 34);
+	border-radius: 18px;
+	pointer-events: none;
+	visibility: hidden;
+}
+
+#replays.open #replaycard {
+	pointer-events: auto;
+	visibility: visible;
+}
+
+/* Capped like #stations, so the card fits the shortest screen worth supporting (script_test). */
+#replaylist {
+	display: block;
+	max-height: 420px;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+.replayrow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	box-sizing: border-box;
+	width: 100%;
+	padding: 6px 6px 6px 10px;
+	border-radius: 12px;
+	transition: background-color 0.12s quadratic-out;
+}
+
+.replayrow:hover {
+	background-color: rgba(255, 255, 255, 16);
+}
+
+.replayinfo {
+	flex: 1 1 0px;
+	display: flex;
+	flex-direction: column;
+}
+
+.replayteams {
+	font-size: 13px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.replaymeta {
+	font-size: 11px;
+	color: #a9b6ad;
+}
+
+.replaysave.on {
+	color: #f2c12b;
+}
+
+.replaydelete.confirm {
+	color: #f25c54;
+}
+
+#replaynote {
+	display: block;
+	padding: 6px 8px 2px 10px;
+	font-size: 11px;
+	color: #a9b6ad;
+}
+
+/* ---- replay bar ---------------------------------------------------------------------------------
+   Centred by equal auto margins between left and right rather than a translate, for the pixel grid
+   (see .knob). Clickable while the overlay is hidden: the player holds the pointer for it. */
+
+#replaybar {
+	display: none;
+	position: absolute;
+	left: 0px;
+	right: 0px;
+	bottom: 28px;
+	margin-left: auto;
+	margin-right: auto;
+	width: 780px;
+	height: 56px;
+	box-sizing: border-box;
+	padding: 0px 16px 0px 10px;
+	align-items: center;
+	gap: 12px;
+	background-color: rgba(14, 30, 20, 210);
+	border: 1px rgba(255, 255, 255, 34);
+	border-radius: 28px;
+	pointer-events: auto;
+}
+
+body.replaying #replaybar {
+	display: flex;
+}
+
+#rpclock, #rpfinish {
+	flex: 0 0 auto;
+	font-family: Consolas;
+	font-size: 12px;
+	color: #dfe7e1;
+}
+
+#rpseek {
+	flex: 1 1 0px;
+	height: 16px;
+	display: flex;
+	align-items: center;
+	cursor: pointer;
+	drag: drag;
+}
+
+#rpplayed {
+	width: 0%;
+}
+
+#rphead {
+	left: 0%;
+}
+
+/* Where the goals are; markers only, the GOL button is what jumps. */
+.rpgoal {
+	position: absolute;
+	top: -4px;
+	width: 4px;
+	height: 12px;
+	margin-left: -2px;
+	background-color: #f2c12b;
+	border-radius: 2px;
+	pointer-events: none;
+}
+
+#rpgoal, #rpspeed {
+	width: 40px;
+	font-size: 12px;
+	font-weight: bold;
+}
+
+#rpstatus {
+	position: absolute;
+	left: 0px;
+	right: 0px;
+	top: -22px;
+	text-align: center;
+	font-size: 11px;
+	color: #dfe7e1;
+}
+
+/* ---- peer paths ---------------------------------------------------------------------------------
+   Where the replay list sits, while a network match has peers (peerpaths.lua sets `peers`): how
+   each peer's game traffic travels and its round trip. It stays up with the rest of the overlay
+   hidden, and it is its own drag handle, having no header to grab.
+
+   `pointer-events: auto` is the price of that handle: the panel used to be click-through. It costs
+   nothing while the overlay is down, because the router only feeds the context while the overlay
+   holds the pointer (input_router::set_active), which is the same moment the player stopped
+   clicking on the game. */
+
+#peerpaths {
+	display: none;
+	position: absolute;
+	top: 24px;
+	right: 24px;
+	padding: 6px 12px;
+	background-color: rgba(14, 30, 20, 196);
+	border: 1px rgba(255, 255, 255, 34);
+	border-radius: 14px;
+	pointer-events: auto;
+	drag: drag;
+}
+
+/* Anchored by its right edge, like the replay list it shares the corner with. */
+#peerpaths.moved {
+	right: auto;
+}
+
+body.peers #peerpaths {
+	display: block;
+}
+
+.peerpath {
+	display: block;
+	height: 20px;
+	line-height: 20px;
+	text-align: right;
+	white-space: nowrap;
+	font-size: 12px;
+	color: #dfe7e1;
+}
+
+.peerteam, .peermode {
+	margin-right: 8px;
+}
+
+.peerteam {
+	color: #ffffff;
+}
+
+.peermode, .peerms {
+	font-family: Consolas;
+}
+
+.peermode {
+	color: rgba(223, 231, 225, 150);
+}
+
+/* ---- replay cover -------------------------------------------------------------------------------
+   Opaque, and last in the document so it draws over everything. It takes no click: nothing under
+   it needs one, and a request that never plays expires on its own (replay_player::state). */
+
+#replaycover {
+	display: none;
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	right: 0px;
+	bottom: 0px;
+	background-color: rgba(8, 16, 11, 250);
+	pointer-events: none;
+}
+
+body.replaywait #replaycover {
+	display: block;
+}
+
+#replaycoverbadge {
+	position: absolute;
+	left: 0px;
+	right: 0px;
+	top: 50%;
+	width: 40px;
+	height: 40px;
+	margin: -52px auto 0px auto;
+}
+
+#replaycoverbadge svg {
+	display: block;
+	width: 40px;
+	height: 40px;
+}
+
+#replaycovertext {
+	position: absolute;
+	left: 0px;
+	right: 0px;
+	top: 50%;
+	margin-top: 4px;
+	text-align: center;
+	font-size: 16px;
+	color: #dfe7e1;
+}
+
+/* ---- report -------------------------------------------------------------------------------------
+   The in-game report form. Bottom centre, because the two corners are taken: the music pill owns
+   the left edge and the replay list the top right, and a card opening over either of them would
+   cover the thing the player was reading when they decided to report. Centred by equal auto
+   margins rather than a translate, like #replaybar, for the pixel grid.
+
+   Compact on purpose. It is a card that hangs off a header, closed by default, and the surface a
+   player sees is the 44px header and nothing else. Same glass, same radii and the same closed-card
+   rule as #replaycard: closed it neither draws nor takes a click, which is `visibility: hidden`
+   removing the subtree from the stacking context. */
+
+#report {
+	display: none;
+	pointer-events: auto;
+	position: absolute;
+	left: 0px;
+	right: 0px;
+	bottom: 24px;
+	margin-left: auto;
+	margin-right: auto;
+	width: 360px;
+	/* Stated, not left to the header: the card is positioned by its `bottom`, which resolves
+	   against THIS box, and an auto height here would make the card's place depend on the order
+	   layout happened to close the two in. */
+	height: 44px;
+}
+
+/* The most anchored of the four, so the most to switch off: it is centred by a left/right pair
+   with auto margins between them and held to the bottom edge. All four go, and the inline left and
+   top layout.lua writes are then the only things placing it. The stated height stays: the card
+   above it is still positioned against this box. */
+#report.moved {
+	right: auto;
+	bottom: auto;
+	margin-left: 0px;
+	margin-right: 0px;
+}
+
+/* IN A MATCH ONLY. `peers` is set by peerpaths.lua when peer_paths::read() returns rows, which it
+   does only during a network match -- so this is the one class that means "a game is being played
+   right now" rather than "the overlay is up". The lobby must not carry it: an owner requirement,
+   and the data agrees, because outside a match the roster the panel offers is empty and the only
+   report a player could file would be against a name he typed from memory.
+
+   This is the opposite scoping to #replays, which shows in the lobby and hides on `peers`: you
+   watch a finished match between matches, and you report the player you are playing against while
+   you are playing him. The two panels are never on screen together, which is also why neither has
+   to make room for the other. */
+body.peers #report {
+	display: block;
+}
+
+/* #replaybar owns this spot while a replay runs, and `hidden` is the overlay being closed. */
+body.hidden #report, body.replaywait #report, body.replaying #report {
+	display: none;
+}
+
+#reporthead {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	box-sizing: border-box;
+	height: 44px;
+	padding: 0px 16px 0px 6px;
+	background-color: rgba(14, 30, 20, 196);
+	border: 1px rgba(255, 255, 255, 34);
+	border-radius: 22px;
+	cursor: pointer;
+	drag: drag;
+}
+
+#reportbadge {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	background-color: rgba(255, 255, 255, 18);
+	border-radius: 16px;
+}
+
+#reportbadge .icon {
+	font-size: 16px;
+	color: #dfe7e1;
+}
+
+#reporttitle {
+	flex: 1 1 0px;
+	font-weight: bold;
+}
+
+#reportchevron {
+	display: block;
+	width: 14px;
+	height: 14px;
+}
+
+/* 52px is the header's 44 plus the 8 the replay card leaves between itself and its own header. */
+#reportcard {
+	display: block;
+	position: absolute;
+	left: 0px;
+	right: 0px;
+	bottom: 52px;
+	box-sizing: border-box;
+	padding: 10px;
+	background-color: rgba(14, 30, 20, 196);
+	border: 1px rgba(255, 255, 255, 34);
+	border-radius: 18px;
+	pointer-events: none;
+	visibility: hidden;
+}
+
+#report.open #reportcard {
+	pointer-events: auto;
+	visibility: visible;
+}
+
+/* ---- kind switch and category chips -------------------------------------------------------------
+   The same shape at two sizes: a lit pill for the chosen one, the station row's blue so that
+   "chosen" means one thing in this document. The border is on every one of them, transparent
+   until then, so lighting one does not move the text a pixel (see .row). */
+
+#reportkind {
+	display: flex;
+	gap: 6px;
+}
+
+.reportseg {
+	flex: 1 1 0px;
+	box-sizing: border-box;
+	height: 28px;
+	line-height: 26px;
+	text-align: center;
+	font-size: 12px;
+	font-weight: bold;
+	color: #a9b6ad;
+	background-color: rgba(255, 255, 255, 12);
+	border: 1px rgba(0, 0, 0, 0);
+	border-radius: 14px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	transition: background-color color 0.12s quadratic-out;
+}
+
+.reportseg:hover {
+	background-color: rgba(255, 255, 255, 24);
+	color: #ffffff;
+}
+
+.reportseg.on {
+	background-color: rgba(43, 156, 242, 40);
+	border: 1px #2b9cf2;
+	color: #ffffff;
+}
+
+#reportcats {
+	display: flex;
+	margin-top: 8px;
+	gap: 6px;
+}
+
+.reportchip {
+	flex: 1 1 0px;
+	box-sizing: border-box;
+	height: 24px;
+	line-height: 22px;
+	text-align: center;
+	font-size: 11px;
+	color: #a9b6ad;
+	background-color: rgba(255, 255, 255, 12);
+	border: 1px rgba(0, 0, 0, 0);
+	border-radius: 12px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	transition: background-color color 0.12s quadratic-out;
+}
+
+.reportchip:hover {
+	background-color: rgba(255, 255, 255, 24);
+	color: #ffffff;
+}
+
+.reportchip.on {
+	background-color: rgba(43, 156, 242, 40);
+	border: 1px #2b9cf2;
+	color: #ffffff;
+}
+
+/* ---- who is being reported ----------------------------------------------------------------------
+   Capped at roughly three rows and a cut fourth, the same argument #stations makes: the card grows
+   upwards off a header on the bottom edge, so a list that grew with the peer count would run off
+   the top of the screen. A bug has no target, so the whole group goes away in that mode rather
+   than sitting there greyed. */
+
+#reporttargets {
+	display: block;
+	margin-top: 8px;
+	max-height: 96px;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+#report.bug #reporttargets, #report.bug #reporttargetinput, #report.bug .reporthint {
+	display: none;
+}
+
+.reportrow {
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	width: 100%;
+	height: 26px;
+	padding: 0px 8px;
+	border: 1px rgba(0, 0, 0, 0);
+	border-radius: 13px;
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	cursor: pointer;
+	transition: background-color 0.12s quadratic-out;
+}
+
+/* The name itself, because the row is a flex container and RmlUi lays out no anonymous text node
+   inside one: written loose, the row drew empty. Clipping belongs here rather than on the row --
+   a flex item is what a too-long team name would otherwise stretch. */
+.reportteam {
+	flex: 1 1 0px;
+	overflow: hidden;
+}
+
+.reportrow:hover {
+	background-color: rgba(255, 255, 255, 16);
+}
+
+.reportrow.on {
+	background-color: rgba(43, 156, 242, 40);
+	border: 1px #2b9cf2;
+}
+
+.reportempty {
+	display: block;
+	padding: 4px 8px;
+	font-size: 11px;
+	color: #a9b6ad;
+}
+
+/* ---- the two text fields ------------------------------------------------------------------------
+   RmlUi lays a text field's line out from the top of its content box, so the vertical centring is
+   padding-top and not align-items: there is no line box here to centre.
+
+   The team field is the SECOND way to name somebody, so it is not in the card until it is asked
+   for: #report.typed is report.lua's answer to "is the typed name in play", which it is when the
+   player pressed the line below the rows, when it already holds something, or when the roster
+   named nobody to pick. Picking a row is otherwise the whole interaction, and a form with a live
+   list and a live text field side by side is a form where the two can disagree. */
+
+#reporttargetinput {
+	display: none;
+	box-sizing: border-box;
+	margin-top: 6px;
+	width: 100%;
+	height: 26px;
+	padding: 5px 8px 0px 8px;
+	font-size: 12px;
+	color: #ffffff;
+	background-color: rgba(255, 255, 255, 12);
+	border: 1px rgba(255, 255, 255, 26);
+	border-radius: 13px;
+	cursor: text;
+	text-align: left;
+}
+
+#report.typed #reporttargetinput {
+	display: block;
+}
+
+/* Only ever a press, never a caption: with nobody to pick, .reportempty above has already said
+   the field is all there is and this line has nothing to add -- so it is laid out only while it
+   is the toggle, which is exactly when report.lua marks it. */
+.reporthint {
+	display: none;
+	margin-top: 4px;
+	padding: 0px 8px;
+	font-size: 11px;
+	color: #a9b6ad;
+}
+
+.reporthint.link {
+	display: block;
+	cursor: pointer;
+}
+
+.reporthint.link:hover {
+	color: #ffffff;
+}
+
+#reporttext {
+	display: block;
+	box-sizing: border-box;
+	margin-top: 8px;
+	width: 100%;
+	height: 66px;
+	padding: 5px 8px;
+	font-size: 12px;
+	color: #ffffff;
+	background-color: rgba(255, 255, 255, 12);
+	border: 1px rgba(255, 255, 255, 26);
+	border-radius: 12px;
+	cursor: text;
+	text-align: left;
+	line-height: 1.3;
+}
+
+#reporttargetinput:focus-visible, #reporttext:focus-visible {
+	border: 1px #2b9cf2;
+}
+
+/* ---- counter, send, status ----------------------------------------------------------------------
+   .section is the card's own separator, so the send row carries it for the same reason the music
+   card's rows do. */
+
+.reportfoot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+#reportcount {
+	flex: 0 0 auto;
+	font-family: Consolas;
+	font-size: 11px;
+	color: #a9b6ad;
+}
+
+/* At the cap, so the player learns the text stopped growing from the counter rather than from a
+   keystroke that did nothing. */
+#reportcount.full {
+	color: #f2c12b;
+}
+
+/* A labelled button, so it overrides .control.primary's 32px icon box. */
+#reportsend {
+	width: auto;
+	height: 28px;
+	padding: 0px 16px;
+	background-color: #2b9cf2;
+	border-radius: 14px;
+	color: #ffffff;
+	font-size: 12px;
+	font-weight: bold;
+	opacity: 1.0;
+	transition: background-color color 0.12s quadratic-out;
+}
+
+#reportsend:hover {
+	background-color: #47aaf5;
+	color: #ffffff;
+}
+
+/* Greyed while one is in flight and for the 30 s afterwards. The server is what enforces the gap;
+   this only stops the player spending a click on a refusal the client can already predict. */
+#reportsend.off {
+	background-color: rgba(255, 255, 255, 20);
+	color: #a9b6ad;
+}
+
+#reportsend.off:hover {
+	background-color: rgba(255, 255, 255, 20);
+	color: #a9b6ad;
+}
+
+#reportstatus {
+	display: block;
+	margin-top: 6px;
+	padding: 0px 4px;
+	font-size: 11px;
+	color: #a9b6ad;
+}
+
+#reportstatus.bad {
+	color: #f25c54;
+}
+
+#reportstatus.good {
+	color: #2b9cf2;
+}

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="76" height="76" viewBox="0 0 76 76">
+  <defs>
+    <linearGradient id="turf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f8a55"/>
+      <stop offset="1" stop-color="#0e2a1a"/>
+    </linearGradient>
+    <linearGradient id="floodlight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="75" height="75" rx="10" fill="url(#turf)" stroke="#0a1f13"/>
+  <rect x="0.5" y="0.5" width="75" height="30" rx="10" fill="url(#floodlight)"/>
+  <g fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.2">
+    <rect x="9" y="9" width="58" height="58" rx="1.5"/>
+    <path d="M9 38 L67 38"/>
+    <circle cx="38" cy="38" r="10"/>
+    <path d="M22 9 L22 20 L54 20 L54 9 M22 67 L22 56 L54 56 L54 67"/>
+  </g>
+  <circle cx="38" cy="38" r="1.4" fill="#ffffff" fill-opacity="0.5"/>
+</svg>
